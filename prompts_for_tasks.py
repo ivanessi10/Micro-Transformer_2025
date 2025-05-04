@@ -12,38 +12,53 @@ def terra_prompt(premise: str, hypothesis: str) -> str:
 """
 
 
-def parus_prompt(premise: str, choice1: str, choice2: str, question: str) -> str:
+def parus_prompt(
+        premise: str,
+        choice1: str,
+        choice2: str,
+        question: str) -> str:
     direction = "причина" if question == "cause" else "следствие"
     return f"""
-Ты решаешь задачу причинно-следственных связей.
-Дано предложение и два возможных {direction}.
-Нужно выбрать, какой из вариантов более правдоподобен как {direction}.
-
-Формат ответа: "вариант 1" или "вариант 2".
-
-Предложение: {premise}
-Вариант 1: {choice1}
-Вариант 2: {choice2}
-Тип связи: {direction}
-
-Ответ:
+Дана текстовая ситуация {premise} и два текста-
+продолжения: 1) {choice1}, 2) {choice2}.
+Определи, какой из двух фрагментов является {direction}
+описанной ситуации.
+В качестве ответа выведи одну цифру 1 или 2.
 """
 
 
-def lidirus_prompt(sentence1: str, sentence2: str) -> str:
+def lidirus_prompt(
+        sentence1: str,
+        sentence2: str,
+        knowledge: str,
+        lexical_semantics: str,
+        logic: str,
+        predicate_argument_structure: str
+        ) -> str:
     return f"""
-Ты решаешь задачу логического вывода (NLI).
-Дано два предложения:
-- первое — это предпосылка,
-- второе — гипотеза.
+Ты решаешь задачу на лингвистическую диагностику
+русского языка. Тебе даны:
+1) Первое предложение: {sentence1},
+2) Второе предложение: {sentence2},
+3) Признак, связанный с фактуальными знаниями
+(например, требует ли задача понимания реального мира) {knowledge}.
+4) Отношение к лексической семантике
+{lexical_semantics}.
+5)Логическая связь между предложениями: {logic}.
+6)Синтаксическая структура:
+{predicate_argument_structure}
 
-Твоя задача — определить, следует ли гипотеза логически из предпосылки.
+Только один из этих параметров непустой.
+В зависимости от этого тебе нужно определить
+правильно ли соотносятся предложения.
 
-Формат ответа: "entailment" или "not_entailment".
+Например:
+первое предложение: Кошка сидела на коврике.
+второе предложение: Кошка не сидела на коврике.
+Логическая связь: negation. Остальные признаки пустые.
+Ответом будет 1, так как предложения действительно противоречат друг другу.
 
-Предпосылка: {sentence1}
-Гипотеза: {sentence2}
-
+Формат ответа: 0(если неправильно) или 1(если правильно).
 Ответ:
 """
 
@@ -70,7 +85,7 @@ def russe_wic_prompt(word: str, sentence1: str, sentence2: str) -> str:
 Нужно определить, используется ли слово в одном и том же значении в обоих
 предложениях.
 
-Формат ответа: "true" (если значение одно и то же) или "false" (если значения
+Формат ответа: 1 (если значение одно и то же) или 0 (если значения
 различаются).
 
 Слово: {word}
@@ -81,24 +96,31 @@ def russe_wic_prompt(word: str, sentence1: str, sentence2: str) -> str:
 """
 
 
-def rcb_prompt(premise: str, hypothesis: str, negation: str, genre: str) -> str:
+def rcb_prompt(premise: str, hypothesis: str, negation: str, verb: str):
     return f"""
-Ты решаешь задачу логического вывода (NLI).
-Тебе дан текст и гипотеза. Нужно определить их логическое соотношение.
-
-Формат ответа: "Entailment", "Contradiction" или "Neutral".
+Тебе дан текст и гипотеза. Нужно определить их логическое соотношение,
+выбери один из трёх вариантов ответа:
+0 - гипотеза следует из текста,
+1 - гипотеза не противоречит, но и не подтверждается,\
+2 - гипотеза противоречит посылке.
+Формат ответа: одно число.
 
 Текст: {premise}
 Гипотеза: {hypothesis}
-Жанр: {genre}
 Наличие отрицания: {negation}
+Глагол действия, по которому подбирались тексты: {verb}
 
 Ответ:
 """
 
 
-def muserc_prompt(text: str, questions: dict) -> str:
-    prompt = f"""
+def muserc_prompt(text: str, question: str, answer: str):
+    return f"""
+Внимательно прочитай текст: {text}. Тебе даны: вопрос: {question},
+и ответ: {answer}.
+Определи, является ли ответ на вопрос правильным.
+Формат ответа: 0 - если ответ неверен, 1 - если ответ верен.
+
 Ты решаешь задачу бинарной классификации.
 На основе данного текста нужно ответить на несколько вопросов, каждый из
 которых сопровождается вариантами ответа.
@@ -106,17 +128,8 @@ def muserc_prompt(text: str, questions: dict) -> str:
 Формат ответа: 0 - если ответ неверен, 1 - если ответ верен.
 Укажи номера всех правильных вариантов (через запятую, если их несколько).
 
-Текст: {text}
 
 """
-    for idx, (question, options) in enumerate(questions.items(), 1):
-        prompt += f"Вопрос {idx}: {question.strip()}\n"
-        for opt_idx, option in enumerate(options, 1):
-            prompt += f"  {opt_idx}) {option.strip()}\n"
-        prompt += "\n"
-
-    prompt += "Ответ:"
-    return prompt
 
 
 def rwsd_prompt(text: str, span1: str, span2: str) -> str:
@@ -135,10 +148,12 @@ def rwsd_prompt(text: str, span1: str, span2: str) -> str:
 """
 
 
-def rucos_prompt(passage: str, query: str) -> str:
+def rucos_prompt(passage: str, query: str, entities) -> str:
     return f"""
 Ты решаешь задачу восстановления пропуска в тексте.
-Прочитай текст и вставь на место "@placeholder" подходящий фрагмент, исходя из
+Прочитай текст: {passage} и вставь на место "@placeholder"
+в запросе: {query} - подходящий
+вариант из списка {entities}, исходя из
 контекста.
 
 Формат ответа: конкретное слово или фраза.
