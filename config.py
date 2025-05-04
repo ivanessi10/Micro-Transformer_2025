@@ -1,52 +1,71 @@
 import os
+import torch
 
-MODEL_CONFIG = {
-    "qwen": {
-        "model_id": "Qwen/Qwen1.5-7B-Chat",
-        "tokenizer_id": "Qwen/Qwen1.5-7B-Chat",
-        "is_chat_format": True,
-        "max_new_tokens": 128,
-        "temperature": 0.3,
-    },
-    "vikhr": {
-        "model_id": "ai-forever/Vikhr-7B-Instruct",
-        "tokenizer_id": "ai-forever/Vikhr-7B-Instruct",
-        "is_chat_format": False,
-        "max_new_tokens": 128,
-        "temperature": 0.3,
-    },
-}
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+
+DEFAULT_MAX_SAMPLES = 200
 
 TASK_METRICS = {
+    "terra": "accuracy",
     "lidirus": "accuracy",
     "rcb": "accuracy",
-    "terra": "accuracy",
-    "russe": "accuracy",
     "danetqa": "accuracy",
-    "rwsd": "accuracy",
-    "parus": "ndcg",
+    "russe": "accuracy",
     "muserc": "f1",
+    "parus": "ndcg",
+    "rwsd": "accuracy",
     "rucos": "f1",
 }
 
-DEFAULT_MAX_SAMPLES = 10
-RESULTS_DIR = "results"
-DEVICE = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") is not None else "cpu"
-
-RSG_SUBMISSION_INFO = {
-    "task_map": {
-        "lidirus": "LiDiRus",
-        "rcb": "RCB",
-        "terra": "TERRa",
-        "muserc": "MuSeRC",
-        "russe": "RUSSE",
-        "parus": "PARus",
-        "danetqa": "DaNetQA",
-        "rwsd": "RWSD",
-        "rucos": "RuCoS",
+MODEL_CONFIG = {
+    "qwen-base": {
+        "model_id": "Qwen/Qwen-7B",
+        "tokenizer_id": "Qwen/Qwen-7B",
+        "max_new_tokens": 128,
+        "temperature": 0.3,
+        "is_chat_format": True,
     },
-    "submission_url": "https://russiansuperglue.com/api/submit",
-    "team_name": "test",
-    "model_name": "test",
-    "api_token": "...",
+    "qwen-micro": {
+        "model_id": os.path.join(MODELS_DIR, "qwen-micro"),
+        "tokenizer_id": "Qwen/Qwen-7B",
+        "max_new_tokens": 128,
+        "temperature": 0.3,
+        "is_chat_format": True,
+    },
+    "gpt2-micro": {
+        "model_id": os.path.join(MODELS_DIR, "gpt2-micro"),
+        "tokenizer_id": "gpt2",
+        "max_new_tokens": 128,
+        "temperature": 0.3,
+        "is_chat_format": False,  
+        "peft": True,
+    },
+}
+
+TRAINING_CONFIG = {
+    "base_model": "Qwen/Qwen-7B",
+    "output_dir": os.path.join(MODELS_DIR, "qwen-micro"),
+    "num_train_epochs": 3,
+    "per_device_train_batch_size": 4,
+    "per_device_eval_batch_size": 4,
+    "gradient_accumulation_steps": 4,
+    "learning_rate": 2e-5,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.1,
+    "logging_steps": 10,
+    "evaluation_strategy": "steps",
+    "eval_steps": 50,
+    "save_steps": 100,
+    "max_seq_length": 512,
+    "load_best_model_at_end": True,
+    "lora": {
+        "r": 16,
+        "lora_alpha": 32,
+        "lora_dropout": 0.05,
+        "bias": "none",
+        "task_type": "CAUSAL_LM",
+        "target_modules": ["c_attn", "c_proj", "w1", "w2"],
+    },
 }
