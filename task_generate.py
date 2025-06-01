@@ -4,42 +4,56 @@ import prompts_for_tasks
 Qwen_name = "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
 Vikhr_name = "Vikhrmodels/QVikhr-2.5-1.5B-Instruct-r"
 
+models = {
+    "qwen": AutoModelForCausalLM.from_pretrained(Qwen_name),
+    "vikhr": AutoModelForCausalLM.from_pretrained(Vikhr_name)
+}
+
+tokenizers = {
+    "qwen": AutoTokenizer.from_pretrained(Qwen_name),
+    "vikhr": AutoTokenizer.from_pretrained(Vikhr_name)
+}
+
 Qwen_tokenizer = AutoTokenizer.from_pretrained(Qwen_name)
 Vikhr_tokenizer = AutoTokenizer.from_pretrained(Vikhr_name)
 
 Qwen_model = AutoModelForCausalLM.from_pretrained(Qwen_name)
 Vikhr_model = AutoModelForCausalLM.from_pretrained(Vikhr_name)
 
-YOU_QWEN = """
-Вы — Qwen, ИИ помощник, созданный для
+YOU_AI = """
+Вы — ИИ помощник, созданный для
 предоставления полезной, честной и безопасной информации.
 """
 
 
-def generate_danetqa(text, question):
+def generate_danetqa(text, question, name):
     input_text = prompts_for_tasks.danetqa_prompt(text, question)
-    input_ids = Qwen_tokenizer(input_text, return_tensors="pt").input_ids
-    output = Qwen_model.generate(input_ids)
-    answer = Qwen_tokenizer.decode(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer(input_text, return_tensors="pt").input_ids
+    output = model.generate(input_ids)
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True).strip()
-    return answer
+    return 1 if (answer == "да" or answer == "Да") else 0
 
 
-def generate_terra(premise, hypothesis):
+def generate_terra(premise, hypothesis, name):
     input_text = prompts_for_tasks.terra_prompt(premise, hypothesis)
-    input_ids = Qwen_tokenizer(input_text, return_tensors="pt").input_ids
-    output = Qwen_model.generate(input_ids)
-    answer = Qwen_tokenizer.decode(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer(input_text, return_tensors="pt").input_ids
+    output = model.generate(input_ids)
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True).strip()
-    return answer
+    return 1 if answer == "entailment" else 0
 
 
 SYSTEM_PROMPT_PARUS = "Отвечай на вопрос только 0 или 1"
 
 
-def generate_parus(premise: str, choice1: str, choice2: str, question: str):
+def generate_parus(premise: str, choice1: str, choice2: str, question: str, name: str):
     input_text = prompts_for_tasks.parus_prompt(
         premise,
         choice1,
@@ -48,57 +62,65 @@ def generate_parus(premise: str, choice1: str, choice2: str, question: str):
     )
     messages = {
         {'role': 'system', 'content': SYSTEM_PROMPT_PARUS},
-        {"role": "system", "content": YOU_QWEN},
+        {"role": "system", "content": YOU_AI},
         {"role": "user", "content": input_text},
     }
-    input_ids = Qwen_tokenizer.apply_chat_template(
+
+    model = models[name]
+    tokenizer = tokenizers[name]
+
+    input_ids = tokenizer.apply_chat_template(
         messages, truncation=True,
         add_generation_prompt=True,
         return_tensors="pt"
     )
-    output = Qwen_model.generate(
+    output = model.generate(
         input_ids,
         max_length=512,
         temperature=0.4,
     )
-    answer = Qwen_tokenizer.decode(
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True
     )
-    return answer
+    return 1 if answer == 1 else 2
 
 
 SYSTEM_PROMPT_RWSD = "Отвечай на вопрос только true или false"
 
 
-def generate_rwsd(text: str, span1: str, span2: str):
+def generate_rwsd(text: str, span1: str, span2: str, name: str):
     input_text = prompts_for_tasks.rwsd_prompt(text, span1, span2)
     messages = {
         {'role': 'system', 'content': SYSTEM_PROMPT_PARUS},
-        {"role": "system", "content": YOU_QWEN},
+        {"role": "system", "content": YOU_AI},
         {"role": "user", "content": input_text},
     }
-    input_ids = Qwen_tokenizer.apply_chat_template(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer.apply_chat_template(
         messages, truncation=True,
         add_generation_prompt=True,
         return_tensors="pt")
-    output = Qwen_model.generate(
+    output = model.generate(
         input_ids,
         max_length=512,
         temperature=0.4,
     )
-    answer = Qwen_tokenizer.decode(
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True
     )
-    return answer
+    return 1 if answer == "true" else 0
 
 
-def generate_rucos(passage, query, entities):
+def generate_rucos(passage, query, entities, name):
     input_text = prompts_for_tasks.rucos_prompt(passage, query, entities)
-    input_ids = Qwen_tokenizer(input_text, return_tensors="pt").input_ids
-    output = Qwen_model.generate(input_ids)
-    answer = Qwen_tokenizer.decode(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer(input_text, return_tensors="pt").input_ids
+    output = model.generate(input_ids)
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True).strip()
     return answer
@@ -107,7 +129,7 @@ def generate_rucos(passage, query, entities):
 SYSTEM_PROMPT_RCB = "Отвечай на вопрос только true или false"
 
 
-def generate_rcb(premise, hypothesis, negation, verb):
+def generate_rcb(premise, hypothesis, negation, verb, name):
     input_text = prompts_for_tasks.rcb_prompt(
         premise,
         hypothesis,
@@ -116,29 +138,36 @@ def generate_rcb(premise, hypothesis, negation, verb):
     )
     messages = {
         {'role': 'system', 'content': SYSTEM_PROMPT_RCB},
-        {"role": "system", "content": YOU_QWEN},
+        {"role": "system", "content": YOU_AI},
         {"role": "user", "content": input_text},
     }
-    input_ids = Qwen_tokenizer.apply_chat_template(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer.apply_chat_template(
         messages, truncation=True,
         add_generation_prompt=True,
         return_tensors="pt")
-    output = Qwen_model.generate(
+    output = model.generate(
         input_ids,
         max_length=512,
         temperature=0.4,
     )
-    answer = Qwen_tokenizer.decode(
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True
     )
-    return answer
+    if (answer == "0"):
+        return 0
+    elif (answer == "1"):
+        return 1
+    else:
+        return 2
 
 
 SYSTEM_PROMPT_MUSERC = "Отвечай на вопрос только 0 или 1"
 
 
-def generate_muserc(text, question, answer):
+def generate_muserc(text, question, answer, name):
     input_text = prompts_for_tasks.muserc_prompt(
         text,
         question,
@@ -146,29 +175,31 @@ def generate_muserc(text, question, answer):
     )
     messages = {
         {'role': 'system', 'content': SYSTEM_PROMPT_MUSERC},
-        {"role": "system", "content": YOU_QWEN},
+        {"role": "system", "content": YOU_AI},
         {"role": "user", "content": input_text},
     }
-    input_ids = Qwen_tokenizer.apply_chat_template(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer.apply_chat_template(
         messages, truncation=True,
         add_generation_prompt=True,
         return_tensors="pt")
-    output = Qwen_model.generate(
+    output = model.generate(
         input_ids,
         max_length=512,
         temperature=0.4,
     )
-    answer = Qwen_tokenizer.decode(
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True
     )
-    return answer
+    return 1 if answer == "1" else 0
 
 
 SYSTEM_PROMPT_RUSSE_WIC = "Отвечай на только 0 или 1"
 
 
-def generate_russe_wic(word: str, sentence1: str, sentence2: str):
+def generate_russe_wic(word: str, sentence1: str, sentence2: str, name:str):
     input_text = prompts_for_tasks.russe_wic_prompt(
         word,
         sentence1,
@@ -176,23 +207,25 @@ def generate_russe_wic(word: str, sentence1: str, sentence2: str):
     )
     messages = {
         {'role': 'system', 'content': SYSTEM_PROMPT_RUSSE_WIC},
-        {"role": "system", "content": YOU_QWEN},
+        {"role": "system", "content": YOU_AI},
         {"role": "user", "content": input_text},
     }
-    input_ids = Qwen_tokenizer.apply_chat_template(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer.apply_chat_template(
         messages, truncation=True,
         add_generation_prompt=True,
         return_tensors="pt")
-    output = Qwen_model.generate(
+    output = model.generate(
         input_ids,
         max_length=512,
         temperature=0.4,
     )
-    answer = Qwen_tokenizer.decode(
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True
     )
-    return answer
+    return 1 if answer == "1" else 0
 
 
 SYSTEM_PROMPT_LIDIRUS = "Отвечай на только 0 или 1"
@@ -204,7 +237,8 @@ def generate_lidirus(
         knowledge: str,
         lexical_semantics: str,
         logic: str,
-        predicate_argument_structure: str):
+        predicate_argument_structure: str,
+        name: str):
     input_text = prompts_for_tasks.lidirus_prompt(
         sentence1,
         sentence2,
@@ -215,20 +249,22 @@ def generate_lidirus(
     )
     messages = {
         {'role': 'system', 'content': SYSTEM_PROMPT_LIDIRUS},
-        {"role": "system", "content": YOU_QWEN},
+        {"role": "system", "content": YOU_AI},
         {"role": "user", "content": input_text},
     }
-    input_ids = Qwen_tokenizer.apply_chat_template(
+    model = models[name]
+    tokenizer = tokenizers[name]
+    input_ids = tokenizer.apply_chat_template(
         messages, truncation=True,
         add_generation_prompt=True,
         return_tensors="pt")
-    output = Qwen_model.generate(
+    output = model.generate(
         input_ids,
         max_length=512,
         temperature=0.4,
     )
-    answer = Qwen_tokenizer.decode(
+    answer = tokenizer.decode(
         output[0][len(input_ids[0]):],
         skip_special_tokens=True
     )
-    return answer
+    return 1 if answer == "1" else 0
