@@ -1,0 +1,23 @@
+# Node.js
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# VS Code
+.vscode/
+
+# Mac
+.DS_Store
+
+# Логи
+*.log
+
+# ENV
+.env
+
+config.py
+dialogues.db
+models/gemma-3b-it-Q4_K_M.gguf

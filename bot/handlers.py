@@ -1,0 +1,110 @@
+from aiogram import Router, F
+from aiogram.filters import CommandStart, Command, StateFilter
+from aiogram.types import Message
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+
+from models.data_answer import GemmaModel
+
+import database_logic.db_logic as db
+
+model = GemmaModel()
+
+router = Router()
+
+class Query(StatesGroup):
+    query_waiting_for_text = State()
+    new_dialogue_waiting_for_name = State()
+    in_dialogue = State()
+    waiting_for_open_dialog_name = State()
+
+@router.message(Command("cancel"))
+@router.message(F.text.casefold() == "cancel")
+async def cancel_handler(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+
+    await state.clear()
+    await message.answer(
+        "cancelled"
+    )
+
+@router.message(CommandStart())
+async def start(message: Message):
+    await message.reply("""Привет! 
+Я -- твой помощник, пока что я умею следующее:
+- по команде /query войти в режим одноразового диалога
+- по команде /cancel выйти из режима диалога(так же можно просто написать слово cancel)
+- по команде /new_dialogue -- создать новый диалог
+- по команде /get_dialogues -- вывести список ваших диалогов
+- по команде /open_dialogue -- открыть существующий диалог, если его нет -- вылезет предупреждение""")
+
+@router.message(StateFilter(None), Command('query'))
+async def query(message: Message, state: FSMContext):
+    await message.answer("Введите текст запроса:")
+
+    await state.set_state(Query.query_waiting_for_text)
+
+@router.message(Query.query_waiting_for_text)
+async def text(message: Message, state: FSMContext):
+    query = message.text
+    await message.answer(model.generate_response(query))
+
+
+    await message.answer("Чем я еще могу помочь?")
+
+@router.message(StateFilter(None), Command('new_dialogue'))
+async def new_dialogue(message: Message, state: FSMContext):
+    await message.answer("Введите имя своего диалога:")
+    
+    await state.set_state(Query.new_dialogue_waiting_for_name)
+
+@router.message(Query.new_dialogue_waiting_for_name)
+async def new_dialogue(message: Message, state: FSMContext):
+    name = message.text 
+    user_id = message.from_user.id
+
+    db.add_dialogue(user_id ,name)
+
+    await state.clear()
+    await message.answer("Диалог успешно создан!")
+
+@router.message(StateFilter(None), Command('get_dialogues'))
+async def get_dialogues(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+
+    names = db.get_user_dialogues(user_id)    
+
+    await message.answer(' '.join(names))
+
+    await message.answer('Выше список ваших диалогов')
+
+@router.message(StateFilter(None), Command('open_dialogue'))
+async def open_dialogue(message: Message, state: FSMContext):
+    await message.answer('Введите название диалога, которых хотите открыть:')
+
+    await state.set_state(Query.waiting_for_open_dialog_name)
+
+@router.message(Query.waiting_for_open_dialog_name)
+async def check_dialogue(message: Message, state: FSMContext):
+    name = message.text
+    user_id = message.from_user.id
+    
+    if name in db.get_user_dialogues(user_id):
+        await message.answer(f'Открываю диалог «{name}». Вот когда он создан:')
+
+        await state.set_state(Query.in_dialogue)
+
+        await message.answer('бимбим')
+    else:
+        await message.answer('Такого диалоге нет у вас')
+
+        await state.clear()
+
+@router.message(Query.in_dialogue)
+async def show_dialogue_context(message: Message, state: FSMContext):
+    name = message.text
+    user_id = message.from_user.id
+
+    await message.answer(db.get_dialogue_created_at(user_id, name))
