@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import datetime
+from typing import List
 
 DB_PATH = "dialogues.db"
 
@@ -12,7 +13,6 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         name TEXT,
-        created_at TEXT,
         UNIQUE(user_id, name)
     )
     ''')
@@ -31,7 +31,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def _get_or_create_dialogue_id(conn, user_id: int, name: str) -> int:
+def _get_or_create_dialogue_id(conn: sqlite3.Connection, user_id: int, name: str) -> int:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT id FROM dialogues WHERE user_id = ? AND name = ?",
@@ -40,23 +40,21 @@ def _get_or_create_dialogue_id(conn, user_id: int, name: str) -> int:
     row = cursor.fetchone()
     if row:
         return row[0]
-    now = '17:03'
     cursor.execute(
-        "INSERT INTO dialogues (user_id, name, created_at) VALUES (?, ?, ?)",
-        (user_id, name, now)
+        "INSERT INTO dialogues (user_id, name) VALUES (?, ?)",
+        (user_id, name)
     )
     return cursor.lastrowid
 
-def add_dialogue(user_id: int, name: str):
+def add_dialogue(user_id: int, name: str) -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
-        dialogue_id = _get_or_create_dialogue_id(conn, user_id, name)
+        _get_or_create_dialogue_id(conn, user_id, name)
         conn.commit()
     finally:
         conn.close()
-    return  
 
-def add_phrase(user_id: int, name: str, user_msg: str, assistant_msg: str):
+def add_phrase(user_id: int, name: str, user_msg: str, assistant_msg: str) -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
         dialogue_id = _get_or_create_dialogue_id(conn, user_id, name)
@@ -74,27 +72,41 @@ def add_phrase(user_id: int, name: str, user_msg: str, assistant_msg: str):
     finally:
         conn.close()
 
-def get_user_dialogues(user_id: int):
+def get_user_dialogues(user_id: int) -> List[str]:
     conn = sqlite3.connect(DB_PATH)
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT name FROM dialogues WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT name FROM dialogues WHERE user_id = ?",
             (user_id,)
         )
         return [row[0] for row in cursor.fetchall()]
     finally:
         conn.close()
 
-def get_dialogue_created_at(user_id: int, name: str):
+def get_full_dialogue(user_id: int, name: str) -> List[str]:
     conn = sqlite3.connect(DB_PATH)
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT created_at FROM dialogues WHERE user_id = ? AND name = ?",
+            "SELECT id FROM dialogues WHERE user_id = ? AND name = ?",
             (user_id, name)
         )
         row = cursor.fetchone()
-        return row
+        if not row:
+            return [] 
+        dialogue_id = row[0]
+
+        cursor.execute(
+            "SELECT role, content FROM messages "
+            "WHERE dialogue_id = ? "
+            "ORDER BY id ASC",
+            (dialogue_id,)
+        )
+        result = []
+        for role, content in cursor.fetchall():
+            prefix = "Assistant" if role == "assistant" else "User"
+            result.append(f"{prefix}: {content}")
+        return result
     finally:
         conn.close()

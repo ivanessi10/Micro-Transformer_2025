@@ -61,7 +61,7 @@ async def new_dialogue(message: Message, state: FSMContext):
     await state.set_state(Query.new_dialogue_waiting_for_name)
 
 @router.message(Query.new_dialogue_waiting_for_name)
-async def new_dialogue(message: Message, state: FSMContext):
+async def new_dialogue_add(message: Message, state: FSMContext):
     name = message.text 
     user_id = message.from_user.id
 
@@ -90,21 +90,30 @@ async def open_dialogue(message: Message, state: FSMContext):
 async def check_dialogue(message: Message, state: FSMContext):
     name = message.text
     user_id = message.from_user.id
+
     
     if name in db.get_user_dialogues(user_id):
-        await message.answer(f'Открываю диалог «{name}». Вот когда он создан:')
+        await message.answer(f'Диалог {name} открыт. Введите ваш запрос:')
+        await state.update_data(name=message.text)
 
         await state.set_state(Query.in_dialogue)
-
-        await message.answer('бимбим')
     else:
-        await message.answer('Такого диалоге нет у вас')
+        await message.answer('Такого диалоге у вас нет')
 
         await state.clear()
 
 @router.message(Query.in_dialogue)
-async def show_dialogue_context(message: Message, state: FSMContext):
-    name = message.text
+async def open_dialogue_context(message: Message, state: FSMContext):
+    prompt = message.text
     user_id = message.from_user.id
+    data = await state.get_data()
+    name = data.get("name")
 
-    await message.answer(db.get_dialogue_created_at(user_id, name))
+    query = ' '.join(db.get_full_dialogue(user_id, name))
+    query += f" User: {prompt}"
+
+    answer_text = model.generate_response(query)
+
+    db.add_phrase(user_id, name, prompt, answer_text)
+
+    await message.answer(answer_text)
