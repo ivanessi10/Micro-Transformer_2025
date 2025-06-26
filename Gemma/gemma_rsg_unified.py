@@ -52,8 +52,8 @@ class GemmaRSGUnified(nn.Module):
                 "rwsd": nn.Linear(self.hidden_size, 2),  # coreference/no_coreference
                 "danetqa": nn.Linear(self.hidden_size, 2),  # yes/no
                 "rucos": nn.Linear(
-                    self.hidden_size, 1
-                ),  # regression for coreference spans
+                    self.hidden_size, 2
+                ),  # binary classification for answer presence
             }
         )
 
@@ -105,17 +105,30 @@ class GemmaRSGUnified(nn.Module):
         # Вычисляем loss если есть метки
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
             if len(set(task_type)) == 1:
                 task = task_type[0]
                 num_labels = self.task_heads[task].out_features
-                loss = loss_fct(logits.view(-1, num_labels), labels.view(-1))
+                if num_labels == 1:
+                    # Регрессия
+                    loss_fct = nn.MSELoss()
+                    loss = loss_fct(logits.view(-1), labels.float())
+                else:
+                    # Классификация
+                    loss_fct = nn.CrossEntropyLoss()
+                    loss = loss_fct(logits.view(-1, num_labels), labels.view(-1))
             else:
                 # Для разных задач в одном батче вычисляем loss отдельно
                 total_loss = 0
                 for i, task in enumerate(task_type):
                     num_labels = self.task_heads[task].out_features
-                    task_loss = loss_fct(logits[i : i + 1], labels[i : i + 1])
+                    if num_labels == 1:
+                        loss_fct = nn.MSELoss()
+                        task_loss = loss_fct(
+                            logits[i : i + 1].view(-1), labels[i : i + 1].float()
+                        )
+                    else:
+                        loss_fct = nn.CrossEntropyLoss()
+                        task_loss = loss_fct(logits[i : i + 1], labels[i : i + 1])
                     total_loss += task_loss
                 loss = total_loss / len(task_type)
 
@@ -168,9 +181,9 @@ class RSGUnifiedDataset(Dataset):
                 "label_map": {True: 1, False: 0},
             },  # yes/no
             "rucos": {
-                "num_labels": 1,
-                "label_map": {},
-            },  # regression task
+                "num_labels": 2,
+                "label_map": {True: 1, False: 0},
+            },  # binary classification for answer presence
         }
 
     def load_all_data(self, split: str = "train"):
@@ -470,14 +483,8 @@ class RSGUnifiedDataset(Dataset):
 
         try:
             with jsonlines.open(file_path) as reader:
-                # Ограничиваем количество примеров для RuCoS из-за большого размера файла
-                max_examples = 1000 if split == "train" else 200
                 count = 0
-
                 for example in reader:
-                    if count >= max_examples:
-                        break
-
                     passage_text = example["passage"]["text"]
 
                     for qa in example["qas"]:
@@ -509,8 +516,10 @@ class RSGUnifiedDataset(Dataset):
                         )
 
                         count += 1
-                        if count >= max_examples:
-                            break
+
+                    # Для train берем только половину данных
+                    if split == "train" and count >= 36000:
+                        break
 
         except Exception as e:
             print(f"Ошибка при загрузке RuCoS {split}: {e}")
@@ -579,7 +588,10 @@ class RSGUnifiedTrainer:
         accuracy = accuracy_score(labels, predictions)
         f1 = f1_score(labels, predictions, average="weighted")
 
-        return {"accuracy": accuracy, "f1": f1}
+        # Добавляем macro F1 для лучшего понимания качества на несбалансированных данных
+        f1_macro = f1_score(labels, predictions, average="macro")
+
+        return {"accuracy": accuracy, "f1": f1, "f1_macro": f1_macro}
 
     def train(
         self,
@@ -602,6 +614,11 @@ class RSGUnifiedTrainer:
         train_data = self.prepare_data(train_examples)
         train_dataset = RSGDatasetWrapper(train_data)
 
+        # Валидация
+        val_examples = self.dataset_loader.load_all_data("val")
+        val_data = self.prepare_data(val_examples)
+        val_dataset = RSGDatasetWrapper(val_data)
+
         # Настройки обучения (оптимизированы для MPS и ограниченной памяти)
         training_args = TrainingArguments(
             output_dir=output_dir,
@@ -615,7 +632,10 @@ class RSGUnifiedTrainer:
             logging_steps=50,
             save_strategy="epoch",
             save_total_limit=2,
-            load_best_model_at_end=False,
+            evaluation_strategy="epoch",
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_accuracy",
+            greater_is_better=True,
             report_to=None,
             gradient_accumulation_steps=16,
             fp16=False,  # Для MPS
@@ -632,7 +652,9 @@ class RSGUnifiedTrainer:
             model=self.model,
             args=training_args,
             train_dataset=train_dataset,
+            eval_dataset=val_dataset,
             data_collator=data_collator,
+            compute_metrics=self.compute_metrics,
         )
 
         # Информация о параметрах
