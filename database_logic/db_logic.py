@@ -4,7 +4,7 @@ from typing import List
 
 DB_PATH = "dialogues.db"
 
-def init_db():
+def init_db() -> None:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -106,7 +106,39 @@ def get_full_dialogue(user_id: int, name: str) -> List[str]:
         result = []
         for role, content in cursor.fetchall():
             prefix = "Assistant" if role == "assistant" else "User"
+            if content[10::] == 'Assistant: ':
+                content[10::]
             result.append(f"{prefix}: {content}")
         return result
     finally:
         conn.close()
+
+def delete_dialogue(user_id: int, name: str) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cursor = conn.cursor()
+        # Найдём id диалога
+        cursor.execute(
+            "SELECT id FROM dialogues WHERE user_id = ? AND name = ?",
+            (user_id, name)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+
+        dialogue_id = row[0]
+
+        cursor.execute(
+            "DELETE FROM messages WHERE dialogue_id = ?",
+            (dialogue_id,)
+        )
+        cursor.execute(
+            "DELETE FROM dialogues WHERE id = ?",
+            (dialogue_id,)
+        )
+
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
