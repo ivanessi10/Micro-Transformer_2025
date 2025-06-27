@@ -106,7 +106,9 @@ def get_full_dialogue(user_id: int, name: str) -> List[str]:
         result = []
         for role, content in cursor.fetchall():
             prefix = "Assistant" if role == "assistant" else "User"
-            if content[10::] == 'Assistant: ':
+            if content == None:
+                content = ''
+            elif content[10::] == 'Assistant: ':
                 content[10::]
             result.append(f"{prefix}: {content}")
         return result

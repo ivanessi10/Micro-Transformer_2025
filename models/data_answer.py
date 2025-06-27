@@ -22,3 +22,4 @@ class GemmaModel:
         )
         
         return output['choices'][0]['message']['content'].strip()
+    
