@@ -7,7 +7,7 @@ INPUT_FILE = "prompts.jsonl"
 OUTPUT_FILE = "distilled_dataset.jsonl"
 
 API_URL = "http://localhost:8000/v1/chat/completions"  
-MODEL_NAME = "Qwen/Qwen1.5-14B-Chat"
+MODEL_NAME = "Qwen/Qwen3-235B-A22B"
 
 HEADERS = {
     "Content-Type": "application/json"
@@ -21,7 +21,7 @@ async def fetch_completion(session, prompt: str):
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
-        "max_tokens": 512
+        "max_tokens": 2048
     }
     async with session.post(API_URL, headers=HEADERS, json=data) as resp:
         if resp.status != 200:
