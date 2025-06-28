@@ -19,6 +19,8 @@ qwen2 = "qwen2"
 vikhr = "vikhr"
 qwen3 = "qwen3"
 
+size = 200
+
 print("task danetqa")
 
 danetqa_df = load_dataset("russian_super_glue", "danetqa")["validation"]
